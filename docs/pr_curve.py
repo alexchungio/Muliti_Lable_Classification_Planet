@@ -41,8 +41,9 @@ def get_precision_and_recall(y_label, y_prob):
     # computer false positive
     fps = threshold_idxs + 1 - tps
 
-    # get distinct value prob
-    thresholds = y_prob[threshold_idxs]
+    # # get distinct value prob
+    # thresholds = y_prob[threshold_idxs]
+    # thresholds = np.r_[thresholds[0] + 1, thresholds]
 
     #------------------------ computer precision and recall------------------------
 
@@ -74,7 +75,7 @@ def pr_plot(precision, recall, area):
 
     plt.figure(figsize=(12, 8))
     plt.plot(recall, precision, linestyle='-', linewidth=2,
-             label='Precision-Recall Curve Area={}'.format(area))
+             label='Precision-Recall Curve Area={:.4f}'.format(area))
 
     plt.fill_between(recall, precision, color='C0', alpha=0.4, interpolate=True)
     plt.xlim([0, 1.0])
