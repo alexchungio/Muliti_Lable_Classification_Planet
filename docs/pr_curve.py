@@ -45,6 +45,7 @@ def get_precision_and_recall(y_label, y_prob):
     thresholds = y_prob[threshold_idxs]
 
     #------------------------ computer precision and recall------------------------
+
     # computer precision
     precision = tps / (tps + fps)
     precision[np.isnan(precision)] = 0
@@ -55,15 +56,18 @@ def get_precision_and_recall(y_label, y_prob):
     last_ind = tps.searchsorted(tps[-1])
     sl = slice(last_ind+1)
 
+    # add (0, 1) vertex to P-R curve
+    final_precision = np.r_[1, precision[sl]]
+    final_recall = np.r_[0, recall[sl]]
     #------------------------ computer AP------------------------------------------
     ap  = 0.
-    for i, (l_r, h_r) in enumerate(zip(recall[:-1], recall[1:])):
+    for i, (l_r, h_r) in enumerate(zip(final_recall[:-1], final_recall[1:])):
 
-        ap += 1 / 2 * (h_r - l_r) * (precision[i] + precision[i+1])
+        ap += 1 / 2 * (h_r - l_r) * (final_precision[i] + final_precision[i+1])
 
     ap = round(ap, 4)
 
-    return np.r_[1, precision[sl]], np.r_[0, recall[sl]], ap
+    return final_precision, final_recall, ap
 
 
 def pr_plot(precision, recall, area):
@@ -71,7 +75,7 @@ def pr_plot(precision, recall, area):
     plt.figure(figsize=(12, 8))
     plt.plot(recall, precision, linestyle='-', linewidth=2,
              label='Precision-Recall Curve Area={}'.format(area))
-    plt.xlim([0, 1.05])
+    plt.xlim([0, 1.0])
     plt.ylim([0, 1.05])
     plt.xlabel('Recall')
     plt.ylabel('Precision')
@@ -88,10 +92,11 @@ def main():
               -0.08258422, -0.26105925]
 
     precision, recall, ap = get_precision_and_recall(y_label, y_prob)
+    print(precision)
+    print(recall)
     pr_plot(precision, recall, ap)
-
     plt.show()
-    print('Done')
+
 
 if __name__ == "__main__":
     main()
