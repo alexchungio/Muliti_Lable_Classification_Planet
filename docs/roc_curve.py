@@ -54,9 +54,13 @@ def get_roc(y_label, y_score):
         tpr = tps / tps[-1]
 
     # -------------------------------computer auc------------------------------------
-    auc = 0.
-    for i, (l_r, h_r) in enumerate(zip(fpr[:-1], fpr[1:])):
-        auc += 1 / 2 * (h_r - l_r) * (tpr[i] + tpr[i + 1])
+    # auc = 0.
+    # for i, (l_r, h_r) in enumerate(zip(fpr[:-1], fpr[1:])):
+    #     auc += 1 / 2 * (h_r - l_r) * (tpr[i] + tpr[i + 1])
+
+    height = np.diff(fpr)
+    bottom = np.convolve(tpr, v=[1, 1], mode='valid')
+    auc = np.sum(height * bottom / 2)
 
     return tpr, fpr, auc
 
@@ -73,7 +77,7 @@ def roc_plot(tpr, fpr, auc):
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
     plt.title('Receiver operating characteristic example')
-    plt.legend(loc="lower right")
+    plt.legend(loc="upper left")
     plt.show()
 
 
@@ -88,6 +92,7 @@ def main():
     tpr, fpr, auc = get_roc(y_label, y_score)
 
     roc_plot(tpr, fpr, auc=auc)
+    print('Done')
 
 
 if __name__ == "__main__":

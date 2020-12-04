@@ -61,12 +61,14 @@ def get_precision_and_recall(y_label, y_prob):
     final_precision = np.r_[1, precision[sl]]
     final_recall = np.r_[0, recall[sl]]
     #------------------------ computer AP------------------------------------------
-    ap  = 0.
-    for i, (l_r, h_r) in enumerate(zip(final_recall[:-1], final_recall[1:])):
+    # ap  = 0.
+    # for i, (l_r, h_r) in enumerate(zip(final_recall[:-1], final_recall[1:])):
+    #     ap += 1 / 2 * (h_r - l_r) * (final_precision[i] + final_precision[i+1])
+    # ap = round(ap, 4)
 
-        ap += 1 / 2 * (h_r - l_r) * (final_precision[i] + final_precision[i+1])
-
-    ap = round(ap, 4)
+    height = np.diff(final_recall)
+    bottom = np.convolve(final_precision, v=[1, 1], mode='valid')
+    ap = np.sum(height * bottom / 2)
 
     return final_precision, final_recall, ap
 
@@ -83,8 +85,8 @@ def pr_plot(precision, recall, area):
     plt.xlabel('Recall')
     plt.ylabel('Precision')
     plt.title('Precision-Recall Curve', fontsize=15)
-    plt.legend(loc='best')
-
+    plt.legend(loc="upper right")
+    plt.show()
 
 def main():
     y_label = [1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0]
@@ -95,10 +97,9 @@ def main():
               -0.08258422, -0.26105925]
 
     precision, recall, ap = get_precision_and_recall(y_label, y_prob)
-    print(precision)
-    print(recall)
     pr_plot(precision, recall, ap)
-    plt.show()
+
+    print('Done')
 
 
 if __name__ == "__main__":
