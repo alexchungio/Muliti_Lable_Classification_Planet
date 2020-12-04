@@ -48,18 +48,32 @@ def get_multi_confusion_matrix(y_label, y_pred):
     return cm, multi_cm
 
 
-def get_precision_score(y_true, y_pred, average='micro'):
+def get_precision_recall_f_score(y_true, y_pred, beta=1.0, average='micro'):
 
     cm, multi_cm = get_multi_confusion_matrix(y_true, y_pred)
 
+    tp = multi_cm[:, 1, 1]
+    fp = multi_cm[:, 0, 1]
+    fn = multi_cm[:, 1, 0]
 
+    tp_sum = tp
+    pred_sum = tp + fp
+    label_sum = tp + fn
 
+    if average == 'micro':
+        tp_sum = np.array([tp.sum()])
+        pred_sum = np.array([pred_sum.sum()])
+        label_sum = np.array([label_sum.sum()])
 
+    precision = tp_sum / pred_sum
+    recall = tp_sum / label_sum
+    f1_score = (1+ beta **2) * precision * recall / ( beta **2 * precision + recall)
 
+    precision = np.average(precision)
+    recall = np.average(recall)
+    f1_score = np.average(f1_score)
 
-
-
-    print(cm)
+    return precision, recall, f1_score
 
 
 def main():
@@ -68,17 +82,21 @@ def main():
     y_pred = [0, 1, 1, 2, 1, 0, 2, 0, 0, 2]
 
 
-    # micro_precision = precision_score(y_true=y_label, y_pred=y_pred, average='micro')
-    # micro_recall = recall_score(y_true=y_label, y_pred=y_pred, average='micro')
-    # micro_f1 = f1_score(y_true=y_label, y_pred=y_pred, average='micro')
-
-    # 0.7 0.7 0.7
-
     # sk_multi_cm = multilabel_confusion_matrix(y_label, y_pred)
     cm, multi_cm = get_multi_confusion_matrix(y_label=y_label, y_pred=y_pred)
 
-    # print(micro_precision, micro_recall, micro_f1)
-
+    # micro precision recall f1_score
+    # micro_precision = precision_score(y_label, y_pred, average='micro')
+    # micro_recall = recall_score(y_label, y_pred, average='micro')
+    # micro_f1 = f1_score(y_label, y_pred, average='micro')
+    micro_precision, micro_recall, micro_f1 = get_precision_recall_f_score(y_label, y_pred, average='micro')
+    print(micro_precision, micro_recall, micro_f1)
+    # macro precision recall f_score
+    # macro_precision = precision_score(y_label, y_pred, average='micro')
+    # macro_recall = recall_score(y_label, y_pred, average='micro')
+    # macro_f1 = f1_score(y_label, y_pred, average='micro')
+    macro_precision, macro_recall, macro_f1 = get_precision_recall_f_score(y_label, y_pred, average='macro')
+    print(macro_precision, macro_recall, macro_f1)
     print('Done')
 
 
