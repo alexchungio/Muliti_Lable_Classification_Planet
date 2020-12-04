@@ -46,7 +46,6 @@ def get_precision_and_recall(y_label, y_prob):
     # thresholds = np.r_[thresholds[0] + 1, thresholds]
 
     #------------------------ computer precision and recall------------------------
-
     # computer precision
     precision = tps / (tps + fps)
     precision[np.isnan(precision)] = 0
@@ -69,6 +68,7 @@ def get_precision_and_recall(y_label, y_prob):
     height = np.diff(final_recall)
     bottom = np.convolve(final_precision, v=[1, 1], mode='valid')
     ap = np.sum(height * bottom / 2)
+
 
     return final_precision, final_recall, ap
 

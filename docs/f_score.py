@@ -184,9 +184,9 @@ def main():
     print('Done')
 
 
-    # micro_precision = precision_score(multi_label_true, multi_label_pred, average="macro")  # 0.6
-    # macro_precision = recall_score(multi_label_true, multi_label_pred, average="macro")
-    # micro_f1 = f1_score(multi_label_true, multi_label_pred, average="macro")
+    # micro_precision = precision_score(multi_label_true, multi_label_pred, average="micro")  # 0.6
+    # macro_precision = recall_score(multi_label_true, multi_label_pred, average="micro")
+    # micro_f1 = f1_score(multi_label_true, multi_label_pred, average="micro")
 
     micro_precision, macro_precision, micro_f1 = multi_label_precision_recall_f(multi_label_true, multi_label_pred)
 

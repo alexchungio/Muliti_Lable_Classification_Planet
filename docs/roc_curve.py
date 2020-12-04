@@ -16,7 +16,12 @@ import matplotlib.pyplot as plt
 
 def get_roc(y_label, y_score):
 
+    """
 
+    :param y_label:
+    :param y_score:
+    :return:
+    """
     assert len(y_label) == len(y_score)
     # invert sort y_pred
     score_indices = np.argsort(y_score, kind="mergesort")[::-1]
@@ -57,7 +62,6 @@ def get_roc(y_label, y_score):
     # auc = 0.
     # for i, (l_r, h_r) in enumerate(zip(fpr[:-1], fpr[1:])):
     #     auc += 1 / 2 * (h_r - l_r) * (tpr[i] + tpr[i + 1])
-
     height = np.diff(fpr)
     bottom = np.convolve(tpr, v=[1, 1], mode='valid')
     auc = np.sum(height * bottom / 2)
