@@ -112,7 +112,6 @@ def multi_label_precision_recall_f(y_label, y_pred, beta=1.0, average='micro'):
         cms.append(cm)
         multi_cms = np.concatenate([multi_cms, multi_cm[1][np.newaxis, :]])
 
-
     # ----------------------computer precision recall and f-score-------------------------
     tp = multi_cms[:, 1, 1]
     fp = multi_cms[:, 0, 1]

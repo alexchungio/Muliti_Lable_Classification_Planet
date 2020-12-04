@@ -41,7 +41,7 @@ def get_confusion_matrix(y_label, y_pred):
 
     return cm
 
-def visual_confusion_matrix(cm, normalize=True, title='confusion matrix', ticklabel=None):
+def visual_confusion_matrix(cm, normalize=False, title='confusion matrix', ticklabel=None):
     """
 
     :param cm:

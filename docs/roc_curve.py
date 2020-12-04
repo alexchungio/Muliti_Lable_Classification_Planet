@@ -70,6 +70,13 @@ def get_roc(y_label, y_score):
 
 
 def roc_plot(tpr, fpr, auc):
+    """
+
+    :param tpr:
+    :param fpr:
+    :param auc:
+    :return:
+    """
     plt.figure()
 
     plt.plot(fpr, tpr, color='darkorange',

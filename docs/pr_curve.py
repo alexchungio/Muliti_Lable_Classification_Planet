@@ -64,11 +64,9 @@ def get_precision_and_recall(y_label, y_prob):
     # for i, (l_r, h_r) in enumerate(zip(final_recall[:-1], final_recall[1:])):
     #     ap += 1 / 2 * (h_r - l_r) * (final_precision[i] + final_precision[i+1])
     # ap = round(ap, 4)
-
     height = np.diff(final_recall)
     bottom = np.convolve(final_precision, v=[1, 1], mode='valid')
     ap = np.sum(height * bottom / 2)
-
 
     return final_precision, final_recall, ap
 
