@@ -36,7 +36,7 @@ def get_confusion_matrix(y_label, y_pred):
     return cm
 
 
-def get_multi_class_confusion_matrix(y_label, y_pred):
+def get_multi_confusion_matrix_old(y_label, y_pred):
     """
 
     :param y_label:
@@ -54,10 +54,38 @@ def get_multi_class_confusion_matrix(y_label, y_pred):
     return cm, multi_cm
 
 
+def get_multi_confusion_matrix(y_label, y_pred):
+
+    y_label = np.array(y_label, dtype=np.int32)
+    y_pred = np.array(y_pred, dtype=np.int32)
+
+    # label_ind = np.where(y_label)
+    labels = np.asarray(sorted(set(y_label)))
+    # num classes
+    num_labels = labels.size
+
+    multi_cm = []
+    # computer tp fp fn tn per class
+    for l in range(num_labels):
+        class_label = y_label == l
+        class_pred = y_pred == l
+
+        tp = np.sum(class_label * class_pred)
+        fp = np.sum((1 - class_label) * class_pred)
+        fn = np.sum(class_label * (1 - class_pred))
+        tn = np.sum((1 - class_label) * (1 - class_pred))
+
+        multi_cm.append([tn, fp, fn, tp])
+
+    multi_cm = np.array(multi_cm).reshape(-1, 2, 2)
+
+    return multi_cm
+
+
 def single_label_precision_recall_f(y_true, y_pred, beta=1.0, average='micro'):
 
     # ----------------------get confusion matrix of per class------------------------------
-    cm, multi_cm = get_multi_class_confusion_matrix(y_true, y_pred)
+    multi_cm = get_multi_confusion_matrix(y_true, y_pred)
 
     # ----------------------computer precision recall and f-score-------------------------
     tp = multi_cm[:, 1, 1]
@@ -104,12 +132,10 @@ def multi_label_precision_recall_f(y_label, y_pred, beta=1.0, average='micro'):
     # ----------------------get confusion matrix of per class------------------------------
     num_class = y_label.shape[1]
 
-    cms = []
     multi_cms = np.zeros((0, 2, 2))
 
     for i in range(num_class):
-        cm, multi_cm = get_multi_class_confusion_matrix(y_label[:, i], y_pred[:, i])
-        cms.append(cm)
+        multi_cm = get_multi_confusion_matrix(y_label[:, i], y_pred[:, i])
         multi_cms = np.concatenate([multi_cms, multi_cm[1][np.newaxis, :]])
 
     # ----------------------computer precision recall and f-score-------------------------
@@ -165,13 +191,14 @@ def main():
     y_label = binary_class_true
     y_pred = binary_class_pred
     #
-    # # sk_multi_cm = multilabel_confusion_matrix(y_label, y_pred)
-    # cm, multi_cm = get_multi_confusion_matrix(y_label=y_label, y_pred=y_pred)
-    #
+    # sk_multi_cm = multilabel_confusion_matrix(y_label, y_pred)
+    cm, multi_cm = get_multi_confusion_matrix_old(y_label=y_label, y_pred=y_pred)
+    multi_cm = get_multi_confusion_matrix(y_label=y_label, y_pred=y_pred)
+
     # micro precision recall f1_score
-    # micro_precision = precision_score(y_label, y_pred, average='micro')
-    # micro_recall = recall_score(y_label, y_pred, average='micro')
-    # micro_f1 = f1_score(y_label, y_pred, average='micro')
+    micro_precision = precision_score(y_label, y_pred, average='micro')
+    micro_recall = recall_score(y_label, y_pred, average='micro')
+    micro_f1 = f1_score(y_label, y_pred, average='micro')
     micro_precision, micro_recall, micro_f1 = single_label_precision_recall_f(y_label, y_pred, average='micro')
     print(micro_precision, micro_recall, micro_f1)
     # macro precision recall f_score
@@ -189,10 +216,9 @@ def main():
 
     micro_precision, macro_precision, micro_f1 = multi_label_precision_recall_f(multi_label_true, multi_label_pred)
 
-
     print(micro_precision, macro_precision, micro_f1)
 
-
+    print('Done')
 
 
 if __name__ == "__main__":

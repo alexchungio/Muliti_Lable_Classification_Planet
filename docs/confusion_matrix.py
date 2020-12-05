@@ -41,6 +41,9 @@ def get_confusion_matrix(y_label, y_pred):
 
     return cm
 
+
+
+
 def visual_confusion_matrix(cm, normalize=False, title='confusion matrix', ticklabel=None):
     """
 
@@ -82,6 +85,10 @@ def main():
     cm = get_confusion_matrix(y_label, y_pred)
 
     visual_confusion_matrix(cm, ticklabel=class_name)
+
+
+
+    print('Done')
 
 if __name__ == "__main__":
     main()
