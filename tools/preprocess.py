@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #------------------------------------------------------
-# @ File       : process_labels.py
+# @ File       : preprocess.py
 # @ Description:  
 # @ Author     : Alex Chung
 # @ Contact    : yonganzhong@outlook.com
@@ -17,36 +17,36 @@ import numpy as np
 import csv
 import math
 from collections import Counter
-from tqdm import tqdm
-
 
 from configs.cfgs import  args
 from utils.misc import read_class_names
 
-# ground label
-LABEL_GROUND_COVER = [
-    'blow_down',
-    'conventional_mine',
-    'slash_burn',
-    'blooming',
-    'artisinal_mine',
-    'selective_logging',
-    'bare_ground',
-    'habitation',
-    'cultivation',
-    'water',
-    'road',
-    'agriculture',
-    'primary',
-]
+def class_reweight(class_count):
+    """
+    re-sample | re-weight
+    use training long tail dataset
+    :param class_count:
+    :return:
+    """
+    assert isinstance(class_count, dict)
+    # sort
+    order_class_count = sorted(class_count.items(), key=lambda x:x[1], reverse=False)
 
-# sky label
-LABEL_SKY_COVER = [
-    'cloudy',
-    'haze',
-    'partly_cloudy',
-    'clear',
-]
+    order_class = [name for name, count in order_class_count]
+    order_count = np.array([count for name, count in order_class_count], dtype=np.int32)
+
+    # get weight
+    class_weight = np.log(np.sum(order_count) / order_count)
+    # minimize weight equal to 1
+    class_weight /= class_weight[-1]
+
+    with open(args.classes, 'w') as fw:
+        for c in order_class:
+            fw.write('{}\n'.format(c))
+
+    with open(args.class_weights, 'w')as fw:
+        for w in class_weight:
+            fw.write('{}\n'.format(w))
 
 
 def count_class():
@@ -58,13 +58,13 @@ def count_class():
     # get number of tag
     count = Counter()
     train_df.tags.apply(lambda x: count.update(x))
-
+    # get class reweight
+    class_reweight(dict(count))
     # convert label to index
     for k in count:
         train_df[k] = [1 if k in tag else 0 for tag in train_df.tags]
 
-    train_df = train_df[(train_df[LABEL_SKY_COVER].T != 0).any()]
-
+    # train_df = train_df[(train_df[LABEL_SKY_COVER].T != 0).any()]
     os.makedirs(os.path.dirname(args.tags_count), exist_ok=True)
     with open(args.tags_count, 'w') as f:
         w = csv.writer(f)
@@ -128,7 +128,6 @@ def get_fold_data(train_df, count, num_folds=5):
             print(k, v)
     labels_df = train_df[['image_name', 'fold'] + list(count.keys())]
     labels_df.to_csv(args.labels, index=False)
-
 
 
 def main():
