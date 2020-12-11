@@ -10,16 +10,8 @@
 # @ Software   : PyCharm
 #-------------------------------------------------------
 
-import torch.utils.data as data
-
-from configs.cfgs import args
-
-
-import cv2
 import torch
 import torch.utils.data as data
-from torch.utils.data.sampler import Sampler
-from torchvision import datasets, transforms
 from PIL import Image
 import pandas as pd
 import numpy as np
@@ -27,6 +19,7 @@ import math
 import os
 import re
 
+from configs.cfgs import args
 from data.transform import get_transform
 from utils.misc import plt_imshow, read_class_names, read_class_weights, index_to_tag
 
@@ -87,7 +80,7 @@ class PlanetDataset(data.Dataset):
             target_path='',
             tags_type='all',
             multi_label=True,
-            train=True,
+            phase='train',
             fold=0,
             img_type='.jpg',
             img_size=(256, 256),
@@ -112,10 +105,12 @@ class PlanetDataset(data.Dataset):
             target_df = pd.read_csv(target_path)
 
             # get data by train or eval
-            if train:
+            if phase=='train':
                 target_df = target_df[target_df['fold'] != fold]
-            else:
+            elif phase == 'eval':
                 target_df = target_df[target_df['fold'] == fold]
+            else:
+                raise KeyError('phase should choice in train and eval')
             target_df.drop(['fold'], 1, inplace=True)
 
             print(len(images), len(target_df.index))
@@ -133,18 +128,18 @@ class PlanetDataset(data.Dataset):
             self.target_array = torch.from_numpy(self.target_array)
         # test / inference
         else:
-            assert not train
+            assert phase != 'train'
             self.images = sorted(images, key=lambda x: natural_key(x[0]))
             self.target_array = None
 
 
     def __getitem__(self, index):
 
-
         image = self.load_image(self.images[index]).convert('RGB')
 
-
-        label = self.target_array[index]
+        label = None
+        if self.target_array is not None:
+            label = self.target_array[index]
 
         if self.transform is not None:
             image = self.transform(image)
@@ -186,14 +181,15 @@ class PlanetDataset(data.Dataset):
 def main():
 
     train_transform = get_transform(size=256, mode='train')
-    train_dataset = PlanetDataset(image_root=args.train_image, target_path=args.labels, transform=train_transform)
+    train_dataset = PlanetDataset(image_root=args.train_data, target_path=args.labels, transform=train_transform)
 
     for image, label in train_dataset:
 
         tags = index_to_tag(label, index_tag=INDEX_NAME)
         plt_imshow(image, title=tags)
-
         break
+
+
 if __name__ == "__main__":
     main()
 

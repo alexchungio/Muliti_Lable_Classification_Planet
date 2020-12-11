@@ -198,14 +198,14 @@ def get_test_transform(mean, std, size):
 
 def get_transform(size, mode='test'):
 
-    assert mode in ['train', 'val', 'test']
+    assert mode in ['train', 'eval', 'test']
 
     if not isinstance(size, tuple):
         size = (size, size)
 
     mean =  [0.311, 0.340, 0.299]
     std = [0.167, 0.144, 0.138]
-    if mode in ['train']:
+    if mode == 'train':
         transform =get_train_transform(mean, std, size)
     else:
         transform = get_test_transform(mean, std, size)
