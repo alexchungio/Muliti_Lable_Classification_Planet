@@ -14,7 +14,6 @@ from PIL import Image, ImageFilter
 import torch
 from torchvision.transforms import transforms
 
-from data.dataset import PlanetDataset
 from configs.cfgs import args
 
 
@@ -218,7 +217,7 @@ def get_transform(size, mode='test'):
 def main():
 
     # train_transform = get_transform(size=256, mode='train')
-
+    from data.dataset import PlanetDataset
     train_dataset = PlanetDataset(image_root=args.train_image, target_path=args.labels)
 
     blur = RandomFilter(blur=True)
@@ -230,7 +229,6 @@ def main():
         shift_image.show()
 
         break
-
 
 if __name__ == "__main__":
     main()

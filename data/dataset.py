@@ -25,81 +25,24 @@ import pandas as pd
 import numpy as np
 import math
 import os
-import utils
 import re
+
+from data.transform import get_transform
+from utils.misc import plt_imshow, read_class_names, read_class_weights, index_to_tag
 
 IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png']
 LABEL_TYPE = ['all']
 
-LABEL_ALL = [
-    'blow_down',
-    'conventional_mine',
-    'slash_burn',
-    'blooming',
-    'artisinal_mine',
-    'selective_logging',
-    'bare_ground',
-    'cloudy',
-    'haze',
-    'habitation',
-    'cultivation',
-    'partly_cloudy',
-    'water',
-    'road',
-    'agriculture',
-    'clear',
-    'primary',
-]
+NAME_INDEX, INDEX_NAME = read_class_names(args.classes)
 
-ALL_WEIGHTS = [
-    382.7857142857,
-    375.13,
-    179.4880382775,
-    112.9909638554,
-    110.6578171091,
-    110.3323529412,
-    43.5185614849,
-    17.9573958832,
-    13.9091583241,
-    10.2494535519,
-    8.37904847,
-    5.1663682688,
-    5.061800027,
-    4.6478751084,
-    3.0461226147,
-    1.3194400478,
-    1.,
-]
-
-ALL_WEIGHTS_L = [
-    8.5841572006,
-    8.5550875696,
-    7.4957594164,
-    6.8327756552,
-    6.8029404468,
-    6.7987290874,
-    5.4763350709,
-    4.2446888943,
-    3.8981269095,
-    3.4917830184,
-    3.2294415648,
-    2.6244210529,
-    2.5997462598,
-    2.4977081866,
-    2.0165400403,
-    1.2137765563,
-    1
-]
-
-
-
-LABEL_PRIMARY = ['primary']
+# ALL_WEIGHTS =
+ALL_WEIGHTS_L = read_class_weights(args.class_weights)
 
 
 def get_tags(tags_type='all'):
 
     if tags_type == 'all':
-        return LABEL_ALL
+        return NAME_INDEX
     else:
         assert False and "Invalid label type"
         return []
@@ -204,7 +147,7 @@ class PlanetDataset(data.Dataset):
         label = self.target_array[index]
 
         if self.transform is not None:
-            image = self.transform(image, size=self.img_size)
+            image = self.transform(image)
 
         return image, label
 
@@ -236,17 +179,21 @@ class PlanetDataset(data.Dataset):
             weighted_samples.append(masked_weights.max())
         weighted_samples = torch.DoubleTensor(weighted_samples)
         weighted_samples = weighted_samples / weighted_samples.min()
+
         return weighted_samples
 
 
 def main():
-    train_dataset = PlanetDataset(image_root=args.train_image, target_path=args.labels)
+
+    train_transform = get_transform(size=256, mode='train')
+    train_dataset = PlanetDataset(image_root=args.train_image, target_path=args.labels, transform=train_transform)
 
     for image, label in train_dataset:
-        image.show()
-        print(label)
-        break
 
+        tags = index_to_tag(label, index_tag=INDEX_NAME)
+        plt_imshow(image, title=tags)
+
+        break
 if __name__ == "__main__":
     main()
 
