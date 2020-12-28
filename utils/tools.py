@@ -14,10 +14,12 @@ import os
 import time
 import torch
 import numpy as np
+import shutil
 from sklearn.metrics import fbeta_score
 
 import adabound
 from utils.radam import RAdam, AdamW
+from configs.cfgs import args
 
 
 class AverageMeter(object):
@@ -65,7 +67,7 @@ def accuracy(output, target, topk=(1,)):
     return res
 
 
-def scores(output, target, threshold=0.5):
+def scores(output, target, threshold=0.5, epsilon=1e-7):
     # Count true positives, true negatives, false positives and false negatives.
 
     predict = (output > threshold).long()
@@ -92,10 +94,17 @@ def scores(output, target, threshold=0.5):
             p = 1.0
             r = 1.0
             f2 = 1.0
+        # avoid ZeroDivisionError: float division by zero
+        elif tp == 0 and (fp > 0 or fn > 0):
+            p = 0.0
+            r = 0.0
+            f2 = 0.0
+        # tp not equal to 0
         else:
             p = tp / (tp + fp)
             r = tp / (tp + fn)
             f2 = (5 * p * r) / (4 * p + r)
+
         acc_sum += acc
         p_sum += p
         r_sum += r
@@ -114,17 +123,17 @@ def f2_score(output, target, threshold):
     return fbeta_score(target, output, beta=2, average='samples')
 
 
-def optimise_f2_thresholds(y, p, verbose=True, resolution=100):
+def optimise_f2_thresholds(target, output, verbose=True, resolution=100):
     """ Find optimal threshold values for f2 score. Thanks Anokas
     https://www.kaggle.com/c/planet-understanding-the-amazon-from-space/discussion/32475
     """
-    size = y.shape[1] # size = num_classes
+    size = target.shape[1] # size = num_classes
 
     def f_score(x):
-        p2 = np.zeros_like(p)
+        p2 = np.zeros_like(output)
         for i in range(size):
-            p2[:, i] = (p[:, i] > x[i]).astype(np.int)
-        score = fbeta_score(y, p2, beta=2, average='samples')
+            p2[:, i] = (output[:, i] > x[i]).astype(np.int)
+        score = fbeta_score(target, p2, beta=2, average='samples')
         return score
 
     x = [0.2] * size
@@ -178,7 +187,7 @@ def get_optimizer(model, args):
         raise NotImplementedError
 
 
-def save_checkpoint(state, path):
+def save_checkpoint(state, model_path, is_best):
     """
 
     :param state:
@@ -187,11 +196,24 @@ def save_checkpoint(state, path):
     """
     try:
         print('Saving state at {}'.format(time.ctime()))
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        torch.save(state, path)
+        os.makedirs(os.path.dirname(model_path), exist_ok=True)
+        torch.save(state, model_path)
+
+        if is_best:
+            shutil.copy(model_path, args.best_checkpoint)
+
     except Exception as e:
         print('Failed due to {}'.format(e))
 
 
 if __name__ == "__main__":
-    pass
+
+    # torch.manual_seed(2020)
+    threshold_0 = 0.2
+    threshold_1 = [0.2] * 6
+    output = torch.randn(size=(4, 6))
+    target = torch.randint(0, 2, size=(4, 6))
+
+    print(scores(output, target, threshold_1))
+
+

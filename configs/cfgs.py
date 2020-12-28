@@ -36,7 +36,7 @@ parser.add_argument('--tags-count', default=os.path.join(ROOT_PATH, 'data', 'cou
 parser.add_argument('--corr', default=os.path.join(ROOT_PATH, 'data', 'counts', 'corr.csv'), type=str, help='the correlation matrix of class')
 parser.add_argument('--labels', default=os.path.join(ROOT_PATH, 'data', 'counts', 'labels.csv'), type=str, help='train data and labels')
 parser.add_argument('--classes', default=os.path.join(ROOT_PATH, 'data', 'classes', 'planet.names'), type=str, help='class name')
-parser.add_argument('--class-weights', default=os.path.join(ROOT_PATH, 'data', 'classes', 'class_weights'), type=str, help='class weight')
+parser.add_argument('--weights', default=os.path.join(ROOT_PATH, 'data', 'classes', 'class_weights'), type=str, help='class weight')
 # parser.add_argument('-train', '--train_data', default=os.path.join(ROOT_PATH, 'data', 'labels', 'train.txt'), type=str) #new_shu_label
 # parser.add_argument('-val', '--val_data', default=os.path.join(ROOT_PATH, 'data', 'labels', 'val.txt'), type=str)
 
@@ -45,7 +45,7 @@ parser.add_argument('--fold', type=int, default=0, metavar='N', help='Train/vali
 parser.add_argument('--multi-label', action='store_true', default=True, help='Multi-label target')
 
 # Checkpoints
-parser.add_argument('-c', '--checkpoint', default=os.path.join(ROOT_PATH, 'outputs', 'weights', 'ckpt.pth.tar'), type=str, metavar='PATH',
+parser.add_argument('-c', '--checkpoint', default=os.path.join(ROOT_PATH, 'outputs', 'weights'), type=str, metavar='PATH',
                     help='path to save checkpoint (default: checkpoint)')
 
 parser.add_argument('--best-checkpoint', default=os.path.join(ROOT_PATH, 'outputs', 'weights', 'best_ckpt.pth.tar'),
@@ -70,7 +70,7 @@ parser.add_argument('--image-type', default='.jpg', type=str, metavar='N',
                     help='train and val image type')
 parser.add_argument('--image-size', default=256, type=int, metavar='N',
                     help='train and val image size')
-parser.add_argument('--batch-size', default=32, type=int, metavar='N',
+parser.add_argument('--batch-size', default=16, type=int, metavar='N',
                     help='train batch size (default: 256)')
 parser.add_argument('--num-works', default=4, type=int, metavar='N',
                     help='number subprocesses to use for data loading (default: 4)')
@@ -84,7 +84,16 @@ parser.add_argument('--lr-times', '--lr_accelerate_times', default=5, type=int,
 
 parser.add_argument('--schedule', type=int, nargs='+', default=[100, 150],
                         help='Decrease learning rate at these epochs.')
+parser.add_argument('--decay-epoch', type=int, default=20, metavar='N', help='epoch interval to decay LR')
 parser.add_argument('--gamma', type=float, default=0.1, help='LR is multiplied by gamma on schedule.')
+
+
+# Loss
+parser.add_argument('--loss', default='mlsm', type=str, metavar='LOSS',
+                    help='Loss function (default: "nll"')
+
+parser.add_argument('--class-weights', action='store_true', default=False,
+                    help='Use class weights for specified labels as loss penalty')
 
 
 # Optimizer
@@ -112,6 +121,11 @@ parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float,
 
 parser.add_argument('--mixup', default=True, type=bool,help='use mixup training strategy')
 parser.add_argument('--mixup-alpha', default=0.2, type=float,help='mixup parameter setting')
+
+
+# metric
+parser.add_argument('--threshold', default=0.3, type=float, help='threshold of classify')
+parser.add_argument('--score_metric', default='loss', type=str, choices=['loss', 'f2'], help='Type of score metric')
 
 
 # Architecture
