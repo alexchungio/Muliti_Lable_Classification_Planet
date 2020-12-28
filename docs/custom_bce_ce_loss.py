@@ -15,13 +15,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def cross_entropy_loss(input, target, weight=None, use_logit=False):
+
+def cross_entropy_loss(input, target, weight=None, use_logit=True):
     if use_logit:
         input = torch.softmax(input, dim=1)
+        input = torch.log(input)
 
     target = F.one_hot(target)
 
-    output = - target * torch.log(input)
+    output = - target * input
 
     if weight is not None:
         new_size = (1, weight.size(0)) if len(weight.size()) else weight.size()
@@ -90,14 +92,24 @@ def main():
     print(output_1)
 
     # test nn.CrossEntropyLoss
-    m_1 = nn.Softmax(dim=1)
-    ce_criterion = nn.CrossEntropyLoss( weight=weight, reduction='mean')
+    ce_criterion = nn.CrossEntropyLoss(weight=weight, reduction='mean')
     output_2 = ce_criterion(input, multi_class_target)
 
     output_3 = cross_entropy_loss(input, multi_class_target, weight=weight, use_logit=True)
 
+
     print(output_2)
     print(output_3)
+
+    # test nn.NLLLoss
+    logit_input = torch.log(F.softmax(input, dim=1))
+    nll_criterion = nn.NLLLoss(weight=weight, reduction='mean')
+    output_4 = ce_criterion(logit_input, multi_class_target)
+
+    output_5 = cross_entropy_loss(logit_input, multi_class_target, weight=weight, use_logit=False)
+
+    print(output_4)
+    print(output_5)
 
 
 if __name__ == "__main__":
