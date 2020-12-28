@@ -30,7 +30,7 @@ from configs.cfgs import args
 from data.dataset import PlanetDataset
 from data.transform import get_transform
 from models.model_factory import build_model
-from utils.tools import get_optimizer, AverageMeter, accuracy
+from utils.tools import get_optimizer, AverageMeter, accuracy, scores, f2_score, optimise_f2_thresholds, save_checkpoint
 
 
 #--------------------------------global config-----------------------------------
@@ -58,6 +58,10 @@ global_step = 0
 def main():
     # --------------------------------config-------------------------------
     global use_cuda
+    threshold = args.threshold
+    best_loss = None
+    best_f2 = None
+
     start_epoch = args.start_epoch  # start from epoch 0 or last checkpoint epoch
     # ------------------------------ load dataset---------------------------
     print('==> Loader dataset {}'.format(args.train_data))
@@ -81,7 +85,7 @@ def main():
                                   img_type=args.image_type,
                                   img_size=args.image_size,
                                   transform=eval_transform)
-    eval_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size,
+    eval_loader = torch.utils.data.DataLoader(eval_dataset, batch_size=args.batch_size,
                                                shuffle=False, num_workers=args.num_works)
 
 
@@ -94,6 +98,7 @@ def main():
     print('\t Total params volumes: {:.2f} M'.format(sum(param.numel() for param in model.parameters()) / 1000000.0))
 
     # --------------------------------criterion-----------------------
+    criterion = None
     if args.class_weights:
         class_weights = torch.from_numpy(train_dataset.get_class_weights()).float()
         class_weights_norm = class_weights / class_weights.sum()
@@ -113,11 +118,15 @@ def main():
     else:
         assert False and "Invalid loss function"
 
-
     #---------------------------------optimizer----------------------------
     optimizer = get_optimizer(model, args)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=5, verbose=False)
 
+    # lr scheduler
+    if not args.decay_epoch:
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1,
+                                                                  patience=8, verbose=False)
+    else:
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.decay_epoch, gamma=0.1)
 
     # # Resume model
     if args.resume:
@@ -143,62 +152,94 @@ def main():
     #
     #     return None
     #
-    # # best_model_weights = copy.deepcopy(model.state_dict())
-    # since = time.time()
-    for epoch in range(start_epoch, args.epochs):
-        # print('Epoch {}/{} | LR {:.8f}'.format(epoch, args.epochs, optimizer.param_groups[0]['lr']))
+    # best_model_weights = copy.deepcopy(model.state_dict())
+    since = time.time()
+    try:
+        for epoch in range(start_epoch, args.epochs):
+            # print('Epoch {}/{} | LR {:.8f}'.format(epoch, args.epochs, optimizer.param_groups[0]['lr']))
 
-        train_loss = train(loader=train_loader, model=model, epoch=epoch, criterion=criterion, optimizer=optimizer,
-                           summary_iter = args.summary_iter, class_weights=class_weights, use_cuda=use_cuda)
-        # test_loss, test_acc_1, test_acc_5 = test(val_loader, model, criterion, use_cuda)
-        #
-        # scheduler.step(metrics=test_loss)
-        #
-        # # save logs
-        # writer.add_scalars(main_tag='epoch/loss', tag_scalar_dict={'train': train_loss, 'val': test_loss},
-        #                    global_step=epoch)
-        # writer.add_scalars(main_tag='epoch/acc_top1', tag_scalar_dict={'train': train_acc_1, 'val': test_acc_1},
-        #                    global_step=epoch)
-        # writer.add_scalars(main_tag='epoch/acc_top5', tag_scalar_dict={'train': train_acc_5, 'val': test_acc_5},
-        #                    global_step=epoch)
-        #
-        # # add learning_rate to logs
-        # writer.add_scalar(tag='lr', scalar_value=optimizer.param_groups[0]['lr'], global_step=epoch)
-    #
-    #     # -----------------------------save model every epoch -----------------------------
-    #     # get param state dict
-    #     if len(args.gpu_id) > 1:
-    #         best_model_weights = model.module.state_dict()
-    #     else:
-    #         best_model_weights = model.state_dict()
-    #
-    #     state = {
-    #         'epoch': epoch + 1,
-    #         'acc': best_acc,
-    #         'state_dict': best_model_weights,
-    #         'optimizer': optimizer.state_dict()
-    #     }
-    #     save_checkpoint(state, args.checkpoint)
-    #
-    #     # save best checkpoint
-    #     if test_acc_1 > best_acc:
-    #         best_acc = test_acc_1
-    #         shutil.copy(args.checkpoint, args.best_checkpoint)
-    #
-    # writer.close()
-    #
-    # time_elapsed = time.time() - since
-    # print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
-    # print('Best val Acc: {:4f}'.format(best_acc))
+            train_metrics = train(loader=train_loader, model=model, epoch=epoch, criterion=criterion, optimizer=optimizer,
+                               threshold=threshold, class_weights=class_weights_norm, use_cuda=use_cuda)
+            eval_metrics, latest_threshold = eval(loader=eval_loader, model=model, epoch=epoch, criterion=criterion,
+                                                  threshold=threshold, use_cuda=use_cuda)
 
-def train(loader, model, epoch, criterion,  optimizer, summary_iter, class_weights=None, use_cuda=None):
+            if lr_scheduler is not None:
+                lr_scheduler.step(metrics=eval_metrics['eval_loss'])
+
+            # save train and eval metric
+            writer.add_scalars(main_tag='epoch/loss', tag_scalar_dict={'train': train_metrics['train_loss'],
+                                                                       'val': eval_metrics['eval_loss']},
+                               global_step=epoch)
+            writer.add_scalar(tag='epoch/f2_score', scalar_value=eval_metrics['f2_score'],
+                               global_step=epoch)
+
+            # add learning_rate to logs
+            writer.add_scalar(tag='lr', scalar_value=optimizer.param_groups[0]['lr'], global_step=epoch)
+
+            # -----------------------------save model every epoch -----------------------------
+            # get param state dict
+            if len(args.gpu_id) > 1:
+                model_weights = model.module.state_dict()
+            else:
+                model_weights = model.state_dict()
+
+            # -------------------------- save model state--------------------------
+            is_best = False
+
+            if best_loss is not None or best_f2 is not None:
+                if eval_metrics['eval_loss'] < best_loss[0]:
+                    best_loss = (eval_metrics['eval_loss'], epoch)
+                    if args.score_metric == 'loss':
+                        is_best = True
+                elif  eval_metrics['f2_score'] > best_f2[0]:
+                    best_f2 = (eval_metrics['f2'], epoch)
+                    if args.score_metric == 'f2':
+                        is_best = True
+                else:
+                    is_best = False
+                    pass
+            else:
+                best_loss = (eval_metrics['eval_loss'], epoch)
+                best_f2 = (eval_metrics['eval_f2'], epoch)
+                is_best = True
+
+
+            state = {
+                # 'arch': model,
+                'epoch': epoch + 1,
+                'state_dict': model_weights,
+                'optimizer': optimizer.state_dict(),
+                'loss': eval_metrics['loss'],
+                'f2': eval_metrics['f2_score'],
+                'num_gpu': len(args.gpu_id.split(','))
+            }
+            save_checkpoint(state,
+                            os.path.join(args.checkpoint, 'ckpt-{}.pth.tar'.format(epoch)),
+                            is_best=is_best)
+
+    except KeyboardInterrupt:
+        pass
+
+    writer.close()
+
+    time_elapsed = time.time() - since
+    print('*** Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
+    print('*** Eval best loss: {0} (epoch {1})'.format(best_loss[1], best_loss[0]))
+    print('*** Eval best f2_score: {0} (epoch {1})'.format(best_f2[1], best_f2[0]))
+
+def train(loader, model, epoch, criterion,  optimizer, threshold, class_weights=None, use_cuda=None):
 
     global global_step
     model.train()
-    losses = AverageMeter()
-    # acc_top1 = AverageMeter()
-    # acc_top5 = AverageMeter()
-    batch_time = AverageMeter()
+    acc_top1_meter = AverageMeter()
+    acc_top5_meter = AverageMeter()
+
+    precision_meter = AverageMeter()
+    acc_meter = AverageMeter()
+    f2_score_meter = AverageMeter()
+
+    loss_meter = AverageMeter()
+    batch_time_meter = AverageMeter()
 
     start_time = time.time()
     pbar = tqdm(loader)
@@ -209,7 +250,7 @@ def train(loader, model, epoch, criterion,  optimizer, summary_iter, class_weigh
         input_var = torch.autograd.Variable(inputs)
 
         if args.multi_label and args.loss == 'null':
-            # if multi-label and null set, train network by sampling an index using class weights
+            # if multi-label and nll setting, train network by sampling an index using class weights
             if class_weights is not None:
                 target_weights = targets * torch.unsqueeze(class_weights, 0).expand_as(targets)
                 sum_weights = target_weights.sum(dim=1, keepdim=True).expand_as(target_weights)
@@ -220,20 +261,9 @@ def train(loader, model, epoch, criterion,  optimizer, summary_iter, class_weigh
         else:
             target_var = torch.autograd.Variable(targets)
 
-        output = model(input_var)
-        loss = criterion(output, target_var)
-        losses.update(loss.item(), input_var.size(0))
-
-        # measure accuracy and record
-        # acc_1, acc_5 = accuracy(outputs.data, target=targets.data, topk=(1, 5))
-        # losses.update(loss.item(), inputs.size(0))
-        # acc_top1.update(acc_1.item(), inputs.size(0))
-        # acc_top5.update(acc_5.item(), inputs.size(0))
-        #
-        # if (global_step + 1) % summary_iter == 0:
-        #     writer.add_scalar(tag='train/loss', scalar_value=loss.cpu().item(), global_step=global_step)
-        #     writer.add_scalar(tag='train/acc_top1', scalar_value= acc_1, global_step=global_step)
-        #     writer.add_scalar(tag='train/acc_top5', scalar_value=acc_5, global_step=global_step)
+        outputs = model(input_var)
+        loss = criterion(outputs, target_var)
+        loss_meter.update(loss.item(), input_var.size(0))
 
         # grad clearing
         optimizer.zero_grad()
@@ -246,66 +276,165 @@ def train(loader, model, epoch, criterion,  optimizer, summary_iter, class_weigh
 
         # pbar.set_description('train loss {0}'.format(loss.item()), refresh=False)
 
-        batch_time.update(time.time() - start_time)
+        # --------------------------metric---------------------------------------
+        if args.loss == 'nll':
+            outputs = F.softmax(outputs)
+        else:
+            outputs = torch.sigmoid(outputs)
+
+        if args.multi_label:
+            acc, p, _, f2_score = scores(outputs.data, target_var.data, threshold)
+            acc_meter.update(acc, outputs.size(0))
+            precision_meter.update(p, outputs.size(0))
+            f2_score_meter.update(f2_score, outputs.size(0))
+        else:
+            acc_1, acc_5 = accuracy(outputs.data, targets, topk=(1, 5))
+            acc_top1_meter.update(acc_1[0], outputs.size(0))
+            acc_top5_meter.update(acc_5[0], outputs.size(0))
+
+        batch_time_meter.update(time.time() - start_time)
 
         pbar.set_description('Train Epoch: {} [{}/{} ({:.0f}%)]'.format(epoch,
                                                                         batch_idx * len(input_var),
                                                                         len(loader.sampler),
                                                                         100. * batch_idx / len(loader)))
-        pbar.set_postfix_str('Loss: {loss.val:.6f} ({loss.avg:.4f})  '
-                         'Time: {batch_time.val:.3f}s, {rate:.3f}/s  '
-                         '({batch_time.avg:.3f}s, {rate_avg:.3f}/s)  '.format(
-                         loss=losses,
-                         batch_time=batch_time,
-                         rate=input_var.size(0) / batch_time.val,
-                         rate_avg=input_var.size(0) / batch_time.avg), refresh=True)
+        if args.multi_label:
+            pbar.set_postfix_str('Time {batch_time.val:.3f} ({batch_time.avg:.3f})  '
+                                 'Loss {loss.val:.4f} ({loss.avg:.4f})  '
+                                 'Acc {acc.val:.4f} ({acc.avg:.4f})  '
+                                 'Prec {prec.val:.4f} ({prec.avg:.4f})  '
+                                 'F2 {f2.val:.4f} ({f2.avg:.4f})  '.format(
+                batch_time=batch_time_meter, loss=loss_meter,
+                acc=acc_meter, prec=precision_meter, f2=f2_score_meter),
+                refresh=True)
+        else:
+            pbar.set_postfix_str('Time {batch_time.val:.3f} ({batch_time.avg:.3f})  '
+                                 'Loss {loss.val:.4f} ({loss.avg:.4f})  '
+                                 'Prec@1 {top1.val:.4f} ({top1.avg:.4f})  '
+                                 'Prec@5 {top5.val:.4f} ({top5.avg:.4f})'.format(
+                batch_time=batch_time_meter, loss=loss_meter,
+                top1=acc_top1_meter, top5=acc_top5_meter),
+                refresh=True)
 
         start_time = time.time()
 
+        # writer train log
+        if (global_step + 1) % args.summary_iter == 0:
+            writer.add_scalar(tag='train/loss', scalar_value=loss.cpu().item(), global_step=global_step)
+            writer.add_scalar(tag='train/acc', scalar_value=acc, global_step=global_step)
+            writer.add_scalar(tag='train/precision', scalar_value=p, global_step=global_step)
+        break
 
     # pbar.write()
+    return OrderedDict([('train_loss', loss_meter.avg)])
 
-    return OrderedDict([('loss', losses.avg)])
 
-
-def test(eval_loader, model, criterion, use_cuda):
+def eval(loader, model, epoch, criterion, threshold, use_cuda=None):
 
     model.eval()
 
-    losses = AverageMeter()
-    acc_top1 = AverageMeter()
-    acc_top5 = AverageMeter()
+    acc_top1_meter = AverageMeter()
+    acc_top5_meter = AverageMeter()
 
-    pbar = tqdm(eval_loader)
-    with torch.set_grad_enabled(mode=False):
-        for inputs, targets in pbar:
+    precision_meter = AverageMeter()
+    acc_meter = AverageMeter()
+    f2_score_meter = AverageMeter()
+
+    loss_meter = AverageMeter()
+    batch_time_meter = AverageMeter()
+
+    # record output and target to search best threshold for per category
+    output_list = []
+    target_list = []
+    start_time = time.time()
+    pbar = tqdm(loader)
+    with torch.no_grad():
+        for batch_idx, (inputs, targets) in enumerate(pbar):
             if use_cuda:
                 inputs, targets = inputs.cuda(), targets.cuda()
 
-            # compute output
-            outputs = model(inputs)
-            loss = criterion(outputs, targets)
+            input_var = torch.autograd.Variable(inputs)
 
-            acc_1, acc_5 = accuracy(outputs.data, target=targets.data, topk=(1, 5))
-            losses.update(loss.item(), inputs.size(0))
-            acc_top1.update(acc_1.item(), inputs.size(0))
-            acc_top5.update(acc_5.item(), inputs.size(0))
+            if args.multi_label and args.loss == 'nll':
+                # pick one of the labels for validation loss, should we randomize like in train?
+                # target_var = autograd.Variable(target.max(dim=1)[1].squeeze(), volatile=True)
+                target_var = torch.autograd.Variable(targets.max(dim=1)[1].squeeze())
+            else:
+                # target_var = autograd.Variable(target, volatile=True)
+                target_var = torch.autograd.Variable(targets)
 
-            pbar.set_description('eval loss {0}'.format(loss.item()), refresh=False)
+            # calculate output
+            outputs = model(input_var)
+            # calculate loss
 
-    pbar.write('\teval => loss {:.4f} | acc_top1 {:.4f}  acc_top5 {:.4f}'.format(losses.avg, acc_top1.avg, acc_top5.avg))
+            loss = criterion(outputs, target_var)
 
-    return (losses.avg, acc_top1.avg, acc_top5.avg)
+            loss_meter.update(loss.item(), input_var.size(0))
+
+            # copy to CPU and collect
+            target_list.append(targets.cpu().numpy())
+            output_list.append(outputs.data.cpu().numpy())
+
+            # --------------------------------metric-----------------------------------
+            # multi label
+            if args.multi_label:
+                if args.loss == 'nll':
+                    outputs = F.softmax(outputs)
+                else:
+                    outputs = torch.sigmoid(outputs)
+                acc, p, _, f2_score = scores(outputs.data, target_var.data, threshold)
+                acc_meter.update(acc, outputs.size(0))
+                precision_meter.update(p, outputs.size(0))
+                f2_score_meter.update(f2_score, outputs.size(0))
+            # single label
+            else:
+                acc_1, acc_5 = accuracy(outputs.data, targets, topk=(1, 5))
+                acc_top1_meter.update(acc_1[0], outputs.size(0))
+                acc_top5_meter.update(acc_5[0], outputs.size(0))
 
 
+            batch_time_meter.update(time.time() - start_time)
+
+            pbar.set_description('Eval Epoch: {} [{}/{} ({:.0f}%)]'.format(epoch,
+                                                                            batch_idx * len(input_var),
+                                                                            len(loader.sampler),
+                                                                            100. * batch_idx / len(loader)))
+
+            if args.multi_label:
+                pbar.set_postfix_str('Time {batch_time.val:.3f} ({batch_time.avg:.3f})  '
+                                     'Loss {loss.val:.4f} ({loss.avg:.4f})  '
+                                     'Acc {acc.val:.4f} ({acc.avg:.4f})  '
+                                     'Prec {prec.val:.4f} ({prec.avg:.4f})  '
+                                     'F2 {f2.val:.4f} ({f2.avg:.4f})  '.format(
+                                      batch_time=batch_time_meter, loss=loss_meter,
+                                      acc=acc_meter, prec=precision_meter, f2=f2_score_meter),
+                    refresh=True)
+            else:
+                pbar.set_postfix_str('Time {batch_time.val:.3f} ({batch_time.avg:.3f})  '
+                                     'Loss {loss.val:.4f} ({loss.avg:.4f})  '
+                                     'Prec@1 {top1.val:.4f} ({top1.avg:.4f})  '
+                                     'Prec@5 {top5.val:.4f} ({top5.avg:.4f})'.format(
+                                     batch_time=batch_time_meter, loss=loss_meter,
+                                     top1=acc_top1_meter, top5=acc_top5_meter),
+                    refresh=True)
+
+            start_time = time.time()
+
+        # ----------------------------------update threshold-------------------------------------------
+        output_total = np.concatenate(output_list, axis=0)
+        target_total = np.concatenate(target_list, axis=0)
+        if args.multi_label:
+            new_threshold, f2 = optimise_f2_thresholds(target_total, output_total)
+            metrics = [('eval_loss', loss_meter.avg), ('eval_f2', f2)]
+        else:
+            f2 = f2_score(output_total, target_total, threshold=0.5)
+            new_threshold = []
+            metrics = [('eval_loss', loss_meter.avg), ('eval_f2', f2), ('eval_acc1', acc_top1_meter.avg)]
+
+        return OrderedDict(metrics), new_threshold
 
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
 
 
