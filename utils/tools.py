@@ -127,6 +127,7 @@ def optimise_f2_thresholds(target, output, verbose=True, resolution=100):
     """ Find optimal threshold values for f2 score. Thanks Anokas
     https://www.kaggle.com/c/planet-understanding-the-amazon-from-space/discussion/32475
     """
+    best_score = 0.0
     size = target.shape[1] # size = num_classes
 
     def f_score(x):
@@ -136,23 +137,22 @@ def optimise_f2_thresholds(target, output, verbose=True, resolution=100):
         score = fbeta_score(target, p2, beta=2, average='samples')
         return score
 
-    x = [0.2] * size
-    best_score = 0.0
+    class_threshold = [0.2] * size
     for i in range(size):
-        best_i2 = 0
-        best_score = 0
-        for i2 in range(resolution):
-            i2 /= resolution
-            x[i] = i2
-            score = f_score(x)
+        best_threshold = 0.0
+        best_score = 0.0
+        for threshold in range(resolution):
+            threshold /= resolution
+            class_threshold[i] = threshold
+            score = f_score(class_threshold)
             if score > best_score:
-                best_i2 = i2
+                best_threshold = threshold
                 best_score = score
-        x[i] = best_i2
+        class_threshold[i] = best_threshold
         if verbose:
-            print(i, best_i2, best_score)
+            print(i, best_threshold, best_score)
 
-    return x, best_score
+    return class_threshold, best_score
 
 
 def get_optimizer(model, args):
