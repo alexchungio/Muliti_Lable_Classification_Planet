@@ -28,8 +28,8 @@ LABEL_TYPE = ['all']
 
 NAME_INDEX, INDEX_NAME = read_class_names(args.classes)
 
-# ALL_WEIGHTS =
-ALL_WEIGHTS_L = read_class_weights(args.class_weights)
+# ALL_WEIGHTS
+ALL_WEIGHTS_L = read_class_weights(args.class_weights_path)
 
 
 def get_tags(tags_type='all'):
@@ -113,7 +113,7 @@ class PlanetDataset(data.Dataset):
                 raise KeyError('phase should choice in train and eval')
             target_df.drop(['fold'], 1, inplace=True)
 
-            print(len(images), len(target_df.index))
+            print('Number {} samples {} / {}'.format(phase, len(target_df.index), len(images)))
 
             target_df = target_df[target_df.image_name.map(lambda x: x in images)]
             target_df['filename'] = target_df.image_name.map(lambda x: images[x])

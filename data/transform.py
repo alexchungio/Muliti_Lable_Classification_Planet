@@ -218,7 +218,7 @@ def main():
 
     # train_transform = get_transform(size=256, mode='train')
     from data.dataset import PlanetDataset
-    train_dataset = PlanetDataset(image_root=args.train_image, target_path=args.labels)
+    train_dataset = PlanetDataset(image_root=args.train_data, target_path=args.labels)
 
     blur = RandomFilter(blur=True)
     shift = RandomShift()

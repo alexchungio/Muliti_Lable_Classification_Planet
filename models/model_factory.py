@@ -12,6 +12,9 @@
 from torch import nn
 import models as model_zoo
 
+model_names = sorted(name for name in model_zoo.__dict__
+                                 if not name.startswith("__")
+                                 and callable(model_zoo.__dict__[name]))
 
 def build_model(model_name='resnet50', pretrained=True, num_classes=1000, **kwargs):
 
@@ -78,7 +81,7 @@ def build_model(model_name='resnet50', pretrained=True, num_classes=1000, **kwar
 
 def main():
     resnet_50 = build_model(num_classes=17)
-    print(resnet_50)
+    print(model_names)
 
 if __name__ == "__main__":
     main()
