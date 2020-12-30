@@ -64,7 +64,7 @@ parser.add_argument('-s', '--summary-dir', default=os.path.join(ROOT_PATH, 'outp
 parser.add_argument('--summary-iter', default=100, type=int, help='number of iterator to save logs (default: 1)')
 
 # inference
-parser.add_argument('--inference_path', default=os.path.join(ROOT_PATH, 'outputs', 'inference'), type=str, metavar='PATH',
+parser.add_argument('--inference-path', default=os.path.join(ROOT_PATH, 'outputs', 'inference'), type=str, metavar='PATH',
                     help='path to save inference result (default: logs)')
 
 # Train

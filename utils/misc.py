@@ -63,7 +63,6 @@ def index_to_tag(v, index_tag):
     :param index_tag:
     :return:
     """
-    v = v.numpy()
     idx = np.nonzero(v)
     tags = [index_tag[i] for i in idx[0]]
 
