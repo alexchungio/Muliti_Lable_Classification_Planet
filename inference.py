@@ -17,209 +17,163 @@ import time
 
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 import torch
 import torch.autograd as autograd
 import torch.utils.data as data
+import torch.nn.functional as F
 
 from configs.cfgs import args
 from data.dataset import PlanetDataset
 from data.transform import get_transform
 from models.model_factory import build_model
 from utils.tools import AverageMeter
-from utils.misc import read_class_names
-
-parser = argparse.ArgumentParser(description='Inference')
-parser.add_argument('--data', default='/media/alex/80CA308ECA308288/alex_dataset/planet', metavar='DIR',
-                    help='path to dataset')
-parser.add_argument('--model', default='resnet50', type=str, metavar='MODEL',
-                    help='Name of model to train (default: "countception"')
-parser.add_argument('--multi-label', action='store_true', default=True,
-                    help='Multi-label target')
-parser.add_argument('--no-multi-label', action='store_false', dest='multi_label', default=False,
-                    help='No multi-label target')
-parser.add_argument('--gp', default='avg', type=str, metavar='POOL',
-                    help='Type of global pool, "avg", "max", "avgmax"')
-parser.add_argument('--tta', type=int, default=0, metavar='N',
-                    help='Test/inference time augmentation (oversampling) factor. 0=None (default: 0)')
-parser.add_argument('--tif', action='store_true', default=False,
-                    help='Use tif dataset')
-parser.add_argument('--img-size', type=int, default=256, metavar='N',
-                    help='Image patch size (default: 224)')
-parser.add_argument('--batch-size', type=int, default=32, metavar='N',
-                    help='input batch size for training (default: 16)')
-parser.add_argument('--seed', type=int, default=1, metavar='S',
-                    help='random seed (default: 1)')
-parser.add_argument('--log-interval', type=int, default=100, metavar='N',
-                    help='how many batches to wait before logging training status')
-parser.add_argument('--num-processes', type=int, default=2, metavar='N',
-                    help='how many training processes to use (default: 2)')
-parser.add_argument('-r', '--restore-checkpoint', default=None,
-                    help='path to restore checkpoint, e.g. ./checkpoint-1.tar')
-parser.add_argument('--no-cuda', action='store_true', default=False,
-                    help='disables CUDA training')
-parser.add_argument('--num-gpu', type=int, default=1,
-                    help='Number of GPUS to use')
-parser.add_argument('--output', default='', type=str, metavar='PATH',
-                    help='path to output folder (default: none, current dir)')
+from utils.misc import read_class_names, index_to_tag
 
 
-NAME_INDEX, INDEX_NAME = read_class_names(args.classes)
+# config gpu
+use_cuda = torch.cuda.is_available()
+gpu_ids = list(map(int, args.gpu_id.split(',')))
 
-def main():
-    args = parser.parse_args()
+if use_cuda:
+    torch.cuda.manual_seed_all(args.manual_seed)
+    torch.backends.cudnn.benchmark = True
 
-    model_path = args.best_checkpoint
-    batch_size = args.batch_size
-    img_size = (args.img_size, args.img_size)
-    num_classes = 17
-    if args.tif:
-        img_type = '.tif'
-    else:
-        img_type = '.jpg'
 
-    test_input_root = os.path.join(args.data, 'train-jpg')
-    dataset = AmazonDataset(
-        args.data,
-        train=False,
-        multi_label=args.multi_label,
-        tags_type='all',
-        img_type=img_type,
-        img_size=img_size,
-        test_aug=args.tta,
-    )
+def inference(data_path, threshold=0.3):
 
-    tags = read_class_names(args.classes)
-    output_col = ['image_name'] + tags
+    name_index, index_name = read_class_names(args.classes)
+    output_col = ['image_name'] + list(name_index.keys())
     submission_col = ['image_name', 'tags']
+    inference_dir = None
 
-    loader = data.DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=args.num_processes)
+    #----------------------------dataset generator--------------------------------
+    test_transform = get_transform(size=args.image_size, mode='test')
+    test_dataset = PlanetDataset(image_root=data_path,
+                                 phase='test',
+                                 img_type=args.image_type,
+                                 img_size=args.image_size,
+                                 transform=test_transform)
 
-    model = build_model(args.model, pretrained=False, num_classes=num_classes, global_pool=args.gp)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size,
+                                              shuffle=False, num_workers=args.num_works)
+    # ---------------------------------load model and param--------------------------------
+    model = build_model(model_name = args.model_name, num_classes=args.num_classes, global_pool=args.global_pool)
 
-    if not args.no_cuda:
-        if args.num_gpu > 1:
-            model = torch.nn.DataParallel(model, device_ids=list(range(args.num_gpu))).cuda()
+    if args.best_checkpoint is not None:
+        assert os.path.isfile(args.best_checkpoint), '{} not found'.format(args.best_checkpoint)
+        checkpoint = torch.load(args.best_checkpoint)
+        print('Restoring model with {} architecture...'.format(checkpoint['arch']))
+
+        # load model weights
+        if use_cuda:
+            if checkpoint['num_gpu'] > 1:
+                model = torch.nn.DataParallel(model, device_ids=gpu_ids).cuda()
+            else:
+                model.cuda()
         else:
-            model.cuda()
-
-    if args.restore_checkpoint is not None:
-        assert os.path.isfile(args.restore_checkpoint), '%s not found' % args.restore_checkpoint
-        checkpoint = torch.load(args.restore_checkpoint)
-        print('Restoring model with %s architecture...' % checkpoint['arch'])
-
+            if checkpoint['num_gpu'] > 1:
+                model = torch.nn.DataParallel(model)
+            else:
+                model.cuda()
         model.load_state_dict(checkpoint['state_dict'])
-        if 'args' in checkpoint:
-            train_args = checkpoint['args']
+
+        # update threshold
         if 'threshold' in checkpoint:
             threshold = checkpoint['threshold']
-            threshold = torch.FloatTensor(threshold)
+            threshold = torch.tensor(threshold, dtype=torch.float32)
             print('Using thresholds:', threshold)
-            if not args.no_cuda:
-                threshold = threshold.cuda()
         else:
-            threshold = 0.5
-        if 'gp' in checkpoint and checkpoint['gp'] != args.gp:
-            print("Warning: Model created with global pooling (%s) different from checkpoint (%s)"
-                  % (args.gp, checkpoint['gp']))
-        csplit = os.path.normpath(args.restore_checkpoint).split(sep=os.path.sep)
-        if len(csplit) > 1:
-            exp_name = csplit[-2] + '-' + csplit[-1].split('.')[0]
-        else:
-            exp_name = ''
-        print('Model restored from file: %s' % args.restore_checkpoint)
+            threshold = 0.3
+
+        if use_cuda:
+            threshold = threshold.cuda()
+
+        # generate save path
+        inference_dir = os.path.join(os.path.normcase(args.inference_path), '{}-f{}-{:.6f}'.
+                                     format(checkpoint['arch'], checkpoint['fold'], checkpoint['f2']))
+        os.makedirs(inference_dir, exist_ok=True)
+
+        print('Model restored from file: {}'.format(args.best_checkpoint))
     else:
         assert False and "No checkpoint specified"
 
-    if args.output:
-        output_base = args.output
-    else:
-        output_base = './output'
-    if not exp_name:
-        exp_name = '-'.join([
-            args.model,
-            str(train_args.img_size),
-            'f'+str(train_args.fold),
-            'tif' if args.tif else 'jpg'])
-    output_dir = get_outdir(output_base, 'predictions', exp_name)
-
+    # -------------------------------------inference---------------------------------------
     model.eval()
 
-    batch_time_m = AverageMeter()
-    data_time_m = AverageMeter()
+    batch_time_meter = AverageMeter()
     results_raw = []
-    results_thr = []
-    results_sub = []
+    results_label = []
+    results_submission = []
+
+    since_time = time.time()
+    pbar = tqdm(enumerate(test_loader))
     try:
         with torch.no_grad():
-            end = time.time()
-            for batch_idx, (input, target, index) in enumerate(loader):
-                data_time_m.update(time.time() - end)
-                if not args.no_cuda:
-                    input = input.cuda()
+            start = time.time()
+            for batch_idx, (inputs, _, indices) in pbar:
+                if use_cuda:
+                    inputs = inputs.cuda()
                 # input_var = autograd.Variable(input, volatile=True)
-                input_var = autograd.Variable(input, volatile=True)
-                output = model(input_var)
+                input_var = torch.autograd.Variable(inputs)
+                outputs = model(input_var)
 
-                # augmentation reduction
-                reduce_factor = loader.dataset.get_aug_factor()
-                if reduce_factor > 1:
-                    output.data = output.data.unfold(0, reduce_factor, reduce_factor).mean(dim=2).squeeze(dim=2)
-                    index = index[0:index.size(0):reduce_factor]
+                if args.multi_label:
+                    if args.loss == 'nll':
+                        outputs = F.softmax(outputs)
+                    else:
+                        outputs = torch.sigmoid(outputs)
 
-                # output non-linearity and thresholding
-                output = torch.sigmoid(output)
-                if isinstance(threshold, torch.FloatTensor) or isinstance(threshold, torch.cuda.FloatTensor):
-                    threshold_m = torch.unsqueeze(threshold, 0).expand_as(output.data)
-                    output_thr = (output.data > threshold_m).byte()
-                else:
-                    output_thr = (output.data > threshold).byte()
+                expand_threshold = torch.unsqueeze(threshold, 0).expand_as(outputs)
+                output_labels = (outputs.data > expand_threshold).byte()
 
                 # move data to CPU and collect
-                output = output.cpu().data.numpy()
-                output_thr = output_thr.cpu().numpy()
-                index = index.cpu().numpy().flatten()
-                for i, o, ot in zip(index, output, output_thr):
-                    #print(dataset.inputs[i], o, ot)
-                    image_name = os.path.splitext(os.path.basename(dataset.inputs[i]))[0]
-                    results_raw.append([image_name] + list(o))
-                    results_thr.append([image_name] + list(ot))
-                    results_sub.append([image_name] + [vector_to_tags(ot, tags)])
-                    # end iterating through batch
+                outputs = outputs.cpu().data.numpy()
+                output_labels = output_labels.cpu().numpy()
+                indices = indices.cpu().numpy().flatten()
 
-                batch_time_m.update(time.time() - end)
-                if batch_idx % args.log_interval == 0:
+                for index, output, output_label in zip(indices, outputs, output_labels):
+
+                    image_name = os.path.splitext(os.path.basename(test_dataset.images[index]))[0]
+                    results_raw.append([image_name] + list(output))
+                    results_label.append([image_name] + list(output_label))
+                    results_submission.append([image_name] + [index_to_tag(output_label, index_name)])
+
+                batch_time_meter.update(time.time() - start)
+                if batch_idx % args.summary_iter == 0:
                     print('Inference: [{}/{} ({:.0f}%)]  '
                           'Time: {batch_time.val:.3f}s, {rate:.3f}/s  '
-                          '({batch_time.avg:.3f}s, {rate_avg:.3f}/s)  '
-                          'Data: {data_time.val:.3f} ({data_time.avg:.3f})'.format(
-                        batch_idx * len(input), len(loader.sampler),
-                        100. * batch_idx / len(loader),
-                        batch_time=batch_time_m,
-                        rate=input_var.size(0) / batch_time_m.val,
-                        rate_avg=input_var.size(0) / batch_time_m.avg,
-                        data_time=data_time_m))
+                          '({batch_time.avg:.3f}s, {rate_avg:.3f}/s)  '.format(
+                        batch_idx * len(inputs), len(test_loader.sampler), 100. * batch_idx / len(test_loader),
+                        batch_time=batch_time_meter,
+                        rate=input_var.size(0) / batch_time_meter.val,
+                        rate_avg=input_var.size(0) / batch_time_meter.avg))
 
-                end = time.time()
-            #end iterating through dataset
+                start = time.time()
+
     except KeyboardInterrupt:
         pass
+
     results_raw_df = pd.DataFrame(results_raw, columns=output_col)
-    results_raw_df.to_csv(os.path.join(output_dir, 'results_raw.csv'), index=False)
-    results_thr_df = pd.DataFrame(results_thr, columns=output_col)
-    results_thr_df.to_csv(os.path.join(output_dir, 'results_thr.csv'), index=False)
-    results_sub_df = pd.DataFrame(results_sub, columns=submission_col)
-    results_sub_df.to_csv(os.path.join(output_dir, 'submission.csv'), index=False)
+    results_raw_df.to_csv(os.path.join(inference_dir, 'results_raw.csv'), index=False)
+    results_label_df = pd.DataFrame(results_label, columns=output_col)
+    results_label_df.to_csv(os.path.join(inference_dir, 'results_thr.csv'), index=False)
+    results_submission_df = pd.DataFrame(results_submission, columns=submission_col)
+    results_submission_df.to_csv(os.path.join(inference_dir, 'submission.csv'), index=False)
+
+    time_elapsed = time.time() - since_time
+    print('*** Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
 
 
-# def vector_to_tags(v, tags):
-#     idx = np.nonzero(v)
-#     t = [tags[i] for i in idx[0]]
-#     return ' '.join(t)
+def main():
+
+    test_data = os.path.join(args.dataset, 'train-jpg')
+
+    # print(os.path.normpath(test_data))
+
+    inference(data_path=test_data)
+
 
 if __name__ == '__main__':
     main()

@@ -77,7 +77,7 @@ class PlanetDataset(data.Dataset):
     def __init__(
             self,
             image_root,
-            target_path='',
+            target_path=None,
             tags_type='all',
             multi_label=True,
             phase='train',
@@ -101,7 +101,7 @@ class PlanetDataset(data.Dataset):
 
         # ------------------get target-------------------------------
         # train
-        if target_path:
+        if target_path is not None:
             target_df = pd.read_csv(target_path)
 
             # get data by train or eval
@@ -111,9 +111,9 @@ class PlanetDataset(data.Dataset):
                 target_df = target_df[target_df['fold'] == fold]
             else:
                 raise KeyError('phase should choice in train and eval')
-            target_df.drop(['fold'], 1, inplace=True)
+            target_df.drop(['fold'], axis=1, inplace=True)
 
-            print('Number {} samples {} / {}'.format(phase, len(target_df.index), len(images)))
+            print('Number {} samples {}/{}'.format(phase, len(target_df.index), len(images)))
 
             target_df = target_df[target_df.image_name.map(lambda x: x in images)]
             target_df['filename'] = target_df.image_name.map(lambda x: images[x])
@@ -129,7 +129,10 @@ class PlanetDataset(data.Dataset):
         # test / inference
         else:
             assert phase != 'train'
-            self.images = sorted(images, key=lambda x: natural_key(x[0]))
+
+            # sort image according to index of image name
+            images = sorted(images.items(), key=lambda x: natural_key(x[0]))
+            self.images = [x[1] for x in images]
             self.target_array = None
 
 
@@ -140,11 +143,15 @@ class PlanetDataset(data.Dataset):
         label = None
         if self.target_array is not None:
             label = self.target_array[index]
+        else:
+             label = torch.zeros(1)
 
         if self.transform is not None:
             image = self.transform(image)
 
-        return image, label
+        index = torch.tensor([index], dtype=torch.long)
+
+        return image, label, index
 
 
     def load_image(self, path):
@@ -155,7 +162,6 @@ class PlanetDataset(data.Dataset):
         """
         image = Image.open(path)
         return image.convert('RGB')
-
 
     def __len__(self):
 
@@ -183,13 +189,16 @@ def main():
     train_transform = get_transform(size=256, mode='train')
     train_dataset = PlanetDataset(image_root=args.train_data, target_path=args.labels, transform=train_transform)
 
-    for image, label in train_dataset:
+    for image, label, index in train_dataset:
 
         tags = index_to_tag(label, index_tag=INDEX_NAME)
+
         plt_imshow(image, title=tags)
         break
 
 
 if __name__ == "__main__":
     main()
+
+
 

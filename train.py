@@ -44,6 +44,7 @@ torch.manual_seed(args.manual_seed)
 # set cuda
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu_id
 use_cuda = torch.cuda.is_available()
+gpu_ids = list(map(int, args.gpu_id.split(',')))
 
 if use_cuda:
     torch.cuda.manual_seed_all(args.manual_seed)
@@ -63,6 +64,7 @@ except ImportError:
 def main():
     # --------------------------------config-------------------------------
     global use_cuda
+    global gpu_ids
     threshold = args.threshold
     best_loss = None
     best_f2 = None
@@ -98,7 +100,10 @@ def main():
     model = build_model(model_name=args.model_name, num_classes=args.num_classes, pretrained=args.pretrained,
                         global_pool=args.global_pool)
     if use_cuda:
-        model = torch.nn.DataParallel(model).cuda()  # load model to cuda
+        if len(gpu_ids) > 1:
+            model = torch.nn.DataParallel(model, device_ids=gpu_ids).cuda()  # load model to cuda
+        else:
+            model.cuda()
     # show model size
     print('\t Total params volumes: {:.2f} M'.format(sum(param.numel() for param in model.parameters()) / 1000000.0))
 
@@ -128,11 +133,9 @@ def main():
 
     # lr scheduler
     if not args.decay_epoch:
-        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1,
-                                                                  patience=8, verbose=False)
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1,                                                          patience=8, verbose=False)
     else:
-        # lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.decay_epoch, gamma=0.1)
-        lr_scheduler = None
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.decay_epoch, gamma=0.1)
 
     # # Resume model
     if args.resume:
@@ -169,9 +172,10 @@ def main():
             eval_metrics, latest_threshold = eval(loader=eval_loader, model=model, epoch=epoch, criterion=criterion,
                                                   threshold=threshold, use_cuda=use_cuda)
 
-            if lr_scheduler is not None:
-                lr_scheduler.step(eval_metrics['eval_loss'])
-
+            if args.decay_epoch is None:
+                lr_scheduler.step(eval_metrics['loss'])
+            else:
+                lr_scheduler.step()
 
             # save train and eval metric
             writer.add_scalars(main_tag='epoch/loss', tag_scalar_dict={'train': train_metrics['loss'],
@@ -180,12 +184,15 @@ def main():
 
             if args.multi_label:
                 writer.add_scalars(main_tag='epoch/acc', tag_scalar_dict={'train': train_metrics['acc'],
-                                                                           'val': eval_metrics['acc']})
+                                                                           'val': eval_metrics['acc']},
+                                   global_step=epoch)
             else:
                 writer.add_scalars(main_tag='epoch/acc_top1', tag_scalar_dict={'train': train_metrics['acc_top1'],
-                                                                          'val': eval_metrics['acc_top1']})
+                                                                          'val': eval_metrics['acc_top1']},
+                                   global_step=epoch)
                 writer.add_scalars(main_tag='epoch/acc_top5', tag_scalar_dict={'train': train_metrics['acc_top5'],
-                                                                               'val': eval_metrics['acc_top5']})
+                                                                               'val': eval_metrics['acc_top5']},
+                                   global_step=epoch)
 
             writer.add_scalar(tag='epoch/f2_score', scalar_value=eval_metrics['f2'],
                                global_step=epoch)
@@ -229,10 +236,12 @@ def main():
                 'threshold': latest_threshold,
                 'loss': eval_metrics['loss'],
                 'f2': eval_metrics['f2'],
-                'num_gpu': len(args.gpu_id.split(','))
+                'fold': args.fold,
+                'num_gpu': len(gpu_ids)
             }
             save_checkpoint(state,
-                            os.path.join(args.checkpoint, 'ckpt-{}.pth.tar'.format(epoch)),
+                            os.path.join(args.checkpoint, 'ckpt-{}-f{}-{:.6f}.pth.tar'.format(epoch, args.fold,
+                                                                                              eval_metrics['f2'])),
                             is_best=is_best)
 
     except KeyboardInterrupt:
@@ -293,7 +302,6 @@ def train(loader, model, epoch, criterion,  optimizer, threshold, class_weights=
             target_var = torch.autograd.Variable(torch.multinomial(target_weights, 1).squeeze().long())
         else:
             target_var = torch.autograd.Variable(targets)
-
 
         outputs = model(input_var)
         loss = criterion(outputs, target_var)

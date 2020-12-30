@@ -32,11 +32,16 @@ parser.add_argument('--train-label', default=os.path.join('/media/alex/80CA308EC
 parser.add_argument('--train-data', default=os.path.join('/media/alex/80CA308ECA308288/alex_dataset/planet', 'train-jpg'), type=str)
 parser.add_argument('--test-data', default=os.path.join('/media/alex/80CA308ECA308288/alex_dataset/planet', 'test-jpg'), type=str)
 
-parser.add_argument('--tags-count', default=os.path.join(ROOT_PATH, 'data', 'counts', 'tags_count.csv'), type=str, help='count the number of class') #new_shu_label
-parser.add_argument('--corr', default=os.path.join(ROOT_PATH, 'data', 'counts', 'corr.csv'), type=str, help='the correlation matrix of class')
-parser.add_argument('--labels', default=os.path.join(ROOT_PATH, 'data', 'counts', 'labels.csv'), type=str, help='train data and labels')
-parser.add_argument('--classes', default=os.path.join(ROOT_PATH, 'data', 'classes', 'planet.names'), type=str, help='class name')
-parser.add_argument('--weights', default=os.path.join(ROOT_PATH, 'data', 'classes', 'class_weights'), type=str, help='class weight')
+parser.add_argument('--tags-count', default=os.path.join(ROOT_PATH, 'data', 'counts', 'tags_count.csv'), type=str,
+                    help='path to count the number of class') #new_shu_label
+parser.add_argument('--corr', default=os.path.join(ROOT_PATH, 'data', 'counts', 'corr.csv'), type=str,
+                    help='path to the correlation matrix of class')
+parser.add_argument('--labels', default=os.path.join(ROOT_PATH, 'data', 'counts', 'labels.csv'), type=str,
+                    help='path to train data and labels')
+parser.add_argument('--classes', default=os.path.join(ROOT_PATH, 'data', 'classes', 'planet.names'), type=str,
+                    help='path to class name')
+parser.add_argument('--class-weights-path', default=os.path.join(ROOT_PATH, 'data', 'classes', 'class_weights'), type=str,
+                    help='path to save class weight')
 # parser.add_argument('-train', '--train_data', default=os.path.join(ROOT_PATH, 'data', 'labels', 'train.txt'), type=str) #new_shu_label
 # parser.add_argument('-val', '--val_data', default=os.path.join(ROOT_PATH, 'data', 'labels', 'val.txt'), type=str)
 
@@ -54,9 +59,13 @@ parser.add_argument('--best-checkpoint', default=os.path.join(ROOT_PATH, 'output
 parser.add_argument('--resume', default='', type=str, metavar='PATH',
                     help='resume the train log info')
 # Logs
-parser.add_argument('-s', '--summary', default=os.path.join(ROOT_PATH, 'outputs', 'summary'), type=str, metavar='PATH',
+parser.add_argument('-s', '--summary-dir', default=os.path.join(ROOT_PATH, 'outputs', 'summary'), type=str, metavar='PATH',
                     help='path to save logs (default: logs)')
-parser.add_argument('--summary_iter', default=100, type=int, help='number of iterator to save logs (default: 1)')
+parser.add_argument('--summary-iter', default=100, type=int, help='number of iterator to save logs (default: 1)')
+
+# inference
+parser.add_argument('--inference_path', default=os.path.join(ROOT_PATH, 'outputs', 'inference'), type=str, metavar='PATH',
+                    help='path to save inference result (default: logs)')
 
 # Train
 parser.add_argument('--epochs', default=100, type=int, metavar='N',
@@ -76,7 +85,7 @@ parser.add_argument('--num-works', default=4, type=int, metavar='N',
                     help='number subprocesses to use for data loading (default: 4)')
 
 # LR
-parser.add_argument('--lr', '--learning-rate', default=0.001, type=float,
+parser.add_argument('--lr', '--learning-rate', default=0.01, type=float,
                     metavar='LR', help='initial learning rate，1e-2， 1e-4, 0.001')
 
 parser.add_argument('--lr-times', '--lr_accelerate_times', default=5, type=int,
@@ -84,8 +93,8 @@ parser.add_argument('--lr-times', '--lr_accelerate_times', default=5, type=int,
 
 parser.add_argument('--schedule', type=int, nargs='+', default=[100, 150],
                         help='Decrease learning rate at these epochs.')
-parser.add_argument('--decay-epoch', type=int, default=20, metavar='N', help='epoch interval to decay LR')
-parser.add_argument('--gamma', type=float, default=0.1, help='LR is multiplied by gamma on schedule.')
+parser.add_argument('--decay-epoch', type=int, default=15, metavar='N', help='epoch interval to decay LR')
+parser.add_argument('--gamma', '--factor', type=float, default=0.1, help='LR is multiplied by gamma/factor on schedule.')
 
 
 # Loss
@@ -107,7 +116,7 @@ parser.add_argument('--use-nesterov', default=False, dest='nesterov',
                          action='store_false',
                          help='do not use Nesterov momentum for SGD')
 
-parser.add_argument('--drop', '--dropout', default=0, type=float,
+parser.add_argument('--drop', '--dropout', default=0.1, type=float,
                     metavar='Dropout', help='Dropout ratio')
 
 parser.add_argument('--alpha', default=0.99, type=float, metavar='M',
@@ -116,7 +125,7 @@ parser.add_argument('--beta1', default=0.9, type=float, metavar='M',
                          help='beta1 for Adam (default: 0.9)')
 parser.add_argument('--beta2', default=0.999, type=float, metavar='M',
                          help='beta2 for Adam (default: 0.999)')
-parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float,
+parser.add_argument('--weight-decay', '--wd', default=0.0005, type=float,
                     metavar='W', help='weight decay (default: 1e-4)')
 
 parser.add_argument('--mixup', default=True, type=bool,help='use mixup training strategy')
@@ -147,8 +156,6 @@ parser.add_argument('--evaluate', dest='evaluate', action='store_true',
 parser.add_argument('--pretrained', default=True, dest='pretrained', action='store_true',
                     help='Start with pretrained version of specified network')
 
-parser.add_argument('--test-path', default=os.path.join(ROOT_PATH, 'outputs', 'answer.csv'), type=str, metavar='PATH',
-                    help='resume the train log info')
 
 # Device setting
 parser.add_argument('--gpu-id', default='0', type=str,
