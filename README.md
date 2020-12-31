@@ -57,6 +57,8 @@ python ./inference.py
 
 * Multi-fold cross-validation
 
+* Re-Weighting strategy to alleviate the class-imbalance
+
 * Get best threshold  with brute force search
 
 * Stop when loss plateaus
