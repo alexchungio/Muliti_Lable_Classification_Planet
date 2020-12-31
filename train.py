@@ -284,7 +284,7 @@ def train(loader, model, epoch, criterion,  optimizer, threshold, class_weights=
 
     start_time = time.time()
     pbar = tqdm(loader)
-    for batch_idx, (inputs, targets) in enumerate(pbar):
+    for batch_idx, (inputs, targets, _) in enumerate(pbar):
         if use_cuda:
             inputs, targets = inputs.cuda(), targets.cuda()
 
@@ -406,7 +406,7 @@ def eval(loader, model, epoch, criterion, threshold, use_cuda=None):
     start_time = time.time()
     pbar = tqdm(loader)
     with torch.no_grad():
-        for batch_idx, (inputs, targets) in enumerate(pbar):
+        for batch_idx, (inputs, targets, _) in enumerate(pbar):
             if use_cuda:
                 inputs, targets = inputs.cuda(), targets.cuda()
 

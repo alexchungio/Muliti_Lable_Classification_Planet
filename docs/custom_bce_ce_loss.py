@@ -15,7 +15,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-
 def cross_entropy_loss(input, target, weight=None, use_logit=True):
     if use_logit:
         input = torch.softmax(input, dim=1)
@@ -63,7 +62,6 @@ def binary_cross_entropy_loss(input, target, weight=None, use_logit=False):
         output = output * weight
 
     return torch.mean(output)
-
 
 
 
