@@ -17,7 +17,7 @@ vim ./configs/cfgs.py
 
 ## Preprocess
 
-### Count dataset
+### step1: Count dataset
 ```shell script
 python ./tools/preprocess.py
 ```
