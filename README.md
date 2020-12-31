@@ -7,13 +7,16 @@ Try to use multi-label-classification realize Planet-Kaggle task
 * <https://www.kaggle.com/c/planet-understanding-the-amazon-from-space/data>
 * <https://www.kaggle.com/nikitarom/planets-dataset>
 
-## Train
 
-### change config 
+## Config
 
 ```shell script
 vim ./configs/cfgs.py
 ```
+
+## EDA
+
+[Planet Dataset EDA](https://github.com/alexchungio/Multi-Lable-Classification-Planet/blob/main/docs/Planet_EDA.ipynb)
 
 ## Preprocess
 
@@ -32,7 +35,6 @@ python ./tools/get_mean_std.py
 ```shell script
 python ./train.py
 ```
-### Train log
 
 * training
 <p align=center>
