@@ -116,7 +116,8 @@ def inference(data_path, threshold=0.3):
                 if use_cuda:
                     inputs = inputs.cuda()
                 # input_var = autograd.Variable(input, volatile=True)
-                input_var = torch.autograd.Variable(inputs)
+                # input_var = torch.autograd.Variable(inputs)
+                input_var = inputs
                 outputs = model(input_var)
 
                 if args.multi_label:

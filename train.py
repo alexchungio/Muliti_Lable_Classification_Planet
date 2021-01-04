@@ -21,8 +21,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.data as data
-import torchvision
-from torchvision.transforms import transforms
 import torch.backends.cudnn as cudnn
 from torch.utils.tensorboard import SummaryWriter
 
@@ -288,8 +286,8 @@ def train(loader, model, epoch, criterion,  optimizer, threshold, class_weights=
         if use_cuda:
             inputs, targets = inputs.cuda(), targets.cuda()
 
-        input_var = torch.autograd.Variable(inputs)
-
+        # input_var = torch.autograd.Variable(inputs)
+        input_var = inputs
         if args.multi_label and args.loss == 'null':
             # if multi-label and nll setting, train network by sampling an index using class weights
             if class_weights is not None:
@@ -299,9 +297,11 @@ def train(loader, model, epoch, criterion,  optimizer, threshold, class_weights=
                 target_weights = target_weights.div(sum_weights)
             else:
                 target_weights = targets
-            target_var = torch.autograd.Variable(torch.multinomial(target_weights, 1).squeeze().long())
+            # target_var = torch.autograd.Variable(torch.multinomial(target_weights, 1).squeeze().long())
+            target_var = torch.multinomial(target_weights, 1).squeeze().long()
         else:
-            target_var = torch.autograd.Variable(targets)
+            # target_var = torch.autograd.Variable(targets)
+            target_var = targets
 
         outputs = model(input_var)
         loss = criterion(outputs, target_var)
@@ -410,16 +410,17 @@ def eval(loader, model, epoch, criterion, threshold, use_cuda=None):
             if use_cuda:
                 inputs, targets = inputs.cuda(), targets.cuda()
 
-            input_var = torch.autograd.Variable(inputs)
-
+            # input_var = torch.autograd.Variable(inputs)
+            input_var = inputs
             if args.multi_label and args.loss == 'nll':
                 # pick one of the labels for validation loss, should we randomize like in train?
                 # target_var = autograd.Variable(target.max(dim=1)[1].squeeze(), volatile=True)
-                target_var = torch.autograd.Variable(targets.max(dim=1)[1].squeeze())
+                # target_var = torch.autograd.Variable(targets.max(dim=1)[1].squeeze())
+                target_var = targets.max(dim=1)[1].squeeze()
             else:
                 # target_var = autograd.Variable(target, volatile=True)
-                target_var = torch.autograd.Variable(targets)
-
+                # target_var = torch.autograd.Variable(targets)
+                target_var = targets
             # calculate output
             outputs = model(input_var)
             # calculate loss
