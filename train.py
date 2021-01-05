@@ -23,6 +23,7 @@ import torch.nn.functional as F
 import torch.utils.data as data
 import torch.backends.cudnn as cudnn
 from torch.utils.tensorboard import SummaryWriter
+from apex import amp
 
 from configs.cfgs import args
 from data.dataset import PlanetDataset
@@ -129,6 +130,11 @@ def main():
     #---------------------------------optimizer----------------------------
     optimizer = get_optimizer(model, args)
 
+    # apex optimizer
+    # Initialization
+    # opt_level = 'O1'
+    # model, optimizer = amp.initialize(model, optimizer, opt_level=opt_level)
+
     # lr scheduler
     if not args.decay_epoch:
         lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1,                                                          patience=8, verbose=False)
@@ -204,6 +210,8 @@ def main():
                 model_weights = model.module.state_dict()
             else:
                 model_weights = model.state_dict()
+
+            # model_weights = amp.state_dict()
 
             # -------------------------- save model state--------------------------
             is_best = False
@@ -311,6 +319,8 @@ def train(loader, model, epoch, criterion,  optimizer, threshold, class_weights=
         optimizer.zero_grad()
         # computer grad
         loss.backward()
+        # with amp.scale_loss(loss, optimizer) as scaled_loss:
+        #     scaled_loss.backward()
         # update params
         optimizer.step()
 
