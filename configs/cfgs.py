@@ -40,7 +40,7 @@ parser.add_argument('--labels', default=os.path.join(ROOT_PATH, 'data', 'counts'
                     help='path to train data and labels')
 parser.add_argument('--classes', default=os.path.join(ROOT_PATH, 'data', 'classes', 'planet.names'), type=str,
                     help='path to class name')
-parser.add_argument('--class-weights-path', default=os.path.join(ROOT_PATH, 'data', 'classes', 'class_weights'), type=str,
+parser.add_argument('--class-weights', default=os.path.join(ROOT_PATH, 'data', 'classes', 'class_weights'), type=str,
                     help='path to save class weight')
 # parser.add_argument('-train', '--train_data', default=os.path.join(ROOT_PATH, 'data', 'labels', 'train.txt'), type=str) #new_shu_label
 # parser.add_argument('-val', '--val_data', default=os.path.join(ROOT_PATH, 'data', 'labels', 'val.txt'), type=str)
@@ -101,7 +101,7 @@ parser.add_argument('--gamma', '--factor', type=float, default=0.1, help='LR is 
 parser.add_argument('--loss', default='mlsm', type=str, metavar='LOSS',
                     help='Loss function (default: "nll"')
 
-parser.add_argument('--class-weights', action='store_true', default=False,
+parser.add_argument('--reweight', action='store_true', default=False,
                     help='Use class weights for specified labels as loss penalty')
 
 

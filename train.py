@@ -108,7 +108,7 @@ def main():
 
     # --------------------------------criterion-----------------------
     criterion = None
-    if args.class_weights:
+    if args.reweight:
         class_weights = torch.from_numpy(train_dataset.get_class_weights()).float()
         class_weights_norm = class_weights / class_weights.sum()
         if use_cuda:

@@ -29,7 +29,7 @@ LABEL_TYPE = ['all']
 NAME_INDEX, INDEX_NAME = read_class_names(args.classes)
 
 # ALL_WEIGHTS
-ALL_WEIGHTS_L = read_class_weights(args.class_weights_path)
+ALL_WEIGHTS_L = read_class_weights(args.class_weights)
 
 
 def get_tags(tags_type='all'):
