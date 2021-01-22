@@ -69,6 +69,11 @@ python ./inference.py
 
 * ...
 
+## Deployment
+
+[Deployment-with-tensorRT](./onnx/torch_to_tensortr.md)
+
+
 ## TODO
 
 
