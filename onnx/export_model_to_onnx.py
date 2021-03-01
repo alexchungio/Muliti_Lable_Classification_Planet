@@ -107,7 +107,6 @@ def compare_torch_and_onnx_model(torch_model, onnx_model_path):
 
 
 
-
 def main():
     torch_model = build_model(model_name=args.model_name, num_classes=args.num_classes, global_pool=args.global_pool)
 
@@ -125,16 +124,14 @@ def main():
         # >>> torch.load('tensors.pt', map_location=lambda storage, loc: storage.cuda(1))
         # # Map tensors from GPU 1 to GPU 0
         # >>> torch.load('tensors.pt', map_location={'cuda:1':'cuda:0'})
-
+        print('threshold: {} '.format(checkpoint['threshold']))
         print('Restoring model with {} architecture...'.format(checkpoint['arch']))
-        # load model weights
-        torch_model.load_state_dict(checkpoint['state_dict'])
-
-
         if checkpoint['num_gpu'] > 1:
             torch_model = torch.nn.DataParallel(torch_model).cuda()
         else:
             torch_model.cuda()
+        # load model weights
+        torch_model.load_state_dict(checkpoint['state_dict'])
 
     # convert to onnx
     convert_onnx(torch_model, batch_size=batch_size, onnx_model_path=onnx_model_path)
